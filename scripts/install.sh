@@ -339,6 +339,11 @@ centos | fedora | rhel | ol | rocky | almalinux | amzn)
     if [ "$OS_TYPE" = "amzn" ]; then
         dnf install -y wget git jq openssl >/dev/null
     else
+        if [ ! command -v dnf ] && [ ! command -v yum ] >/dev/null; then
+            rpm-ostree install -y wget git jq openssl curl >/dev/null
+            rpm-ostree apply-live --allow-replacement >/dev/null
+            return 1
+        fi
         if ! command -v dnf >/dev/null; then
             yum install -y dnf >/dev/null
         fi
@@ -403,7 +408,12 @@ if [ "$SSH_DETECTED" = "false" ]; then
         if [ "$OS_TYPE" = "amzn" ]; then
             dnf install -y openssh-server >/dev/null
         else
-            dnf install -y openssh-server >/dev/null
+            if ! command -v dnf >/dev/null; then
+                rpm-ostree install -y openssh-server >/dev/null
+                rpm-ostree apply-live --allow-replacement
+            else
+                dnf install -y openssh-server >/dev/null
+            fi
         fi
         systemctl enable sshd >/dev/null 2>&1
         systemctl start sshd >/dev/null 2>&1
@@ -509,9 +519,14 @@ if ! [ -x "$(command -v docker)" ]; then
         if [ -x "$(command -v dnf5)" ]; then
             # dnf5 is available
             dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/$OS_TYPE/docker-ce.repo --overwrite >/dev/null 2>&1
-        else
+        elif [ -x "$(command -v dnf)" ]; then
             # dnf5 is not available, use dnf
             dnf config-manager --add-repo=https://download.docker.com/linux/$OS_TYPE/docker-ce.repo >/dev/null 2>&1
+        else
+            wget https://download.docker.com/linux/$OS_TYPE/docker-ce.repo /etc/yum.repos.d/ >/dev/null 2>&1
+            rpm-ostree install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null 2>&1
+            rpm-ostree apply-live --allow-replacement
+            return 1 
         fi
         dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null 2>&1
         if ! [ -x "$(command -v docker)" ]; then
